@@ -31,6 +31,9 @@
 #define RETURN_ADDRESS $00C
 #define RETURN_ADDRESS_1 $00D
 
+#define NEW_BUTTON_STATE $00E
+#define INPUT_BUF_INDEX $00F
+
 #define INPUT_BUF_1 $010
 #define INPUT_BUF_2 $014
 #define NUM_BUF_1 $018
@@ -40,7 +43,23 @@
 #define SUB_BUF_1 $030
 #define SUB_BUF_2 $034
 #define SUB_CARRY $041
+#define DEBOUNCE_COUNTER_0 $042
+#define DEBOUNCE_COUNTER_1 $043
+#define DEBOUNCE_COUNTER_2 $044
 #define TMP $048
+
+; buttons
+#define DEBOUNCE_TIME_0 $F
+#define DEBOUNCE_TIME_1 $F
+#define DEBOUNCE_TIME_2 $F
+#define BUTTON_LEFT $1
+#define BUTTON_NOT_LEFT $E
+#define BUTTON_RIGHT $2
+#define BUTTON_NOT_RIGHT $D
+#define BUTTON_DOWN $4
+#define BUTTON_NOT_DOWN $B
+#define BUTTON_UP $8
+#define BUTTON_NOT_UP $7
 
 init_lcd:
 ; To initialize the LCD from an unknown state, we must first set it to 8-bit mode three times. Then it can be set to 4-bit mode.
@@ -80,6 +99,9 @@ init_lcd:
 
     ; The LCD is now in 4-bit mode, and we can send byte-wide commands as a pair of nibble, high nibble first.
 start:
+    lit #0
+    st INPUT_BUF_INDEX
+
     lit #9
     st INPUT_BUF_1
     lit #8
@@ -89,7 +111,60 @@ start:
     lit #6
     st INPUT_BUF_1+3
 
+main_loop:
+    call wait_for_button
+
+check_right_pressed:
+    ; is the right button currently pressed?
+    lit #BUTTON_NOT_RIGHT
+    norm NEW_BUTTON_STATE
+    jz check_left_pressed
+    ld INPUT_BUF_INDEX
+    cmpi #3
+    jz end_checks
+    addi #1
+    st INPUT_BUF_INDEX
+    jmp end_checks
+
+check_left_pressed:
+    lit #BUTTON_NOT_LEFT
+    norm NEW_BUTTON_STATE
+    jz check_down_pressed
+    ld INPUT_BUF_INDEX
+    jz end_checks
+    addi #-1
+    st INPUT_BUF_INDEX
+    jmp end_checks
+
+check_down_pressed:
+    lit #BUTTON_NOT_DOWN
+    norm NEW_BUTTON_STATE
+    jz check_up_pressed
+    ld INPUT_BUF_INDEX
+    ldi INPUT_BUF_1 3
+    jz end_checks
+    addi #-1
+    st TMP
+    ld INPUT_BUF_INDEX
+    sti INPUT_BUF_1 TMP 3
+    jmp end_checks
+
+check_up_pressed:
+    lit #BUTTON_NOT_UP
+    norm NEW_BUTTON_STATE
+    jz end_checks
+    ld INPUT_BUF_INDEX
+    ldi INPUT_BUF_1 3
+    cmpi #9
+    jc end_checks   ; >= 9
+    addi #1
+    st TMP
+    ld INPUT_BUF_INDEX
+    sti INPUT_BUF_1 TMP 3
+
+end_checks:
     call convert_input
+    jmp main_loop
 
     ; clear input buf
     lit #0
@@ -403,6 +478,48 @@ mul10:
 
 halt:
     jmp halt
+
+; ===== KEYS =====
+wait_for_button:
+-   in #PORT_BUTTONS
+    cmpi #$F
+    jz -
+
+    st NEW_BUTTON_STATE
+
+    ; init debounce
+    lit #DEBOUNCE_TIME_0
+    st DEBOUNCE_COUNTER_0
+    lit #DEBOUNCE_TIME_1
+    st DEBOUNCE_COUNTER_1
+    lit #DEBOUNCE_TIME_2
+    st DEBOUNCE_COUNTER_2
+
+debounce:
+    ; each loop is at least 7 instructions, 14 clocks
+    in #PORT_BUTTONS
+    cmpm NEW_BUTTON_STATE
+    jnz wait_for_button
+    ld DEBOUNCE_COUNTER_0
+    addi #-1
+    st DEBOUNCE_COUNTER_0
+    jc debounce
+    ld DEBOUNCE_COUNTER_1
+    addi #-1
+    st DEBOUNCE_COUNTER_1
+    jc debounce
+    ld DEBOUNCE_COUNTER_2
+    addi #-1
+    st DEBOUNCE_COUNTER_2
+    jc debounce
+
+    ; wait for all buttons to be up
+-   in #PORT_BUTTONS
+    cmpi #$F
+    jnz -
+
+    ret
+
 ; ===== LCD ===== 
 
 ; use LCD_BUFFER_INDEX to get the next nibble from LCD_BUFFER, and put it in LCD_NIBBLE
