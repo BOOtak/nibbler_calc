@@ -316,7 +316,7 @@ convert_input:
     jnc +
     ld NUM_BUF_1+2
     addi #1
-    ld NUM_BUF_1+2
+    st NUM_BUF_1+2
     jnc +
     ld NUM_BUF_1+3
     addi #1
