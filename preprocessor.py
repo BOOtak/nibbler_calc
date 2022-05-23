@@ -110,6 +110,8 @@ def main():
                     sti_insert.append(AsmLine("    ld " + value, 0))    
                     sti_insert.append(AsmLine("+   st " + addr + "+15", 0))
                     sti_insert.append(AsmLine("sti_end_" + str(line.num) + ":", 0))
+                    break
+
         if sti_found:
             asm_lines.remove(asm_lines[sti_index])
             asm_lines[sti_index:sti_index] = sti_insert
@@ -138,6 +140,8 @@ def main():
                         ldi_insert.append(AsmLine("    jmp ldi_end_" + str(line.num), 0))
                     ldi_insert.append(AsmLine("+   ld " + addr + "+15", 0))
                     ldi_insert.append(AsmLine("ldi_end_" + str(line.num) + ":", 0))
+                    break
+
         if ldi_found:
             asm_lines.remove(asm_lines[ldi_index])
             asm_lines[ldi_index:ldi_index] = ldi_insert
