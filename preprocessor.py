@@ -97,7 +97,8 @@ def main():
                     sti_index = i
                     addr = line.params[0]
                     value = line.params[1]
-                    for i in range(0, 15):
+                    cap = int(line.params[2]) if len(line.params) > 2 else 15
+                    for i in range(0, cap):
                         if i != 0:
                             sti_insert.append(AsmLine("+   cmpi #" + str(i), 0))
                         sti_insert.append(AsmLine("    jnz +", 0))
@@ -107,8 +108,8 @@ def main():
                         else:
                             sti_insert.append(AsmLine("    st " + addr + "+" + str(i), 0))
                         sti_insert.append(AsmLine("    jmp sti_end_" + str(line.num), 0))
-                    sti_insert.append(AsmLine("    ld " + value, 0))    
-                    sti_insert.append(AsmLine("+   st " + addr + "+15", 0))
+                    sti_insert.append(AsmLine("+   ld " + value, 0))
+                    sti_insert.append(AsmLine("    st " + addr + "+" + str(cap), 0))
                     sti_insert.append(AsmLine("sti_end_" + str(line.num) + ":", 0))
                     break
 
@@ -129,7 +130,8 @@ def main():
                     ldi_found = True
                     ldi_index = i
                     addr = line.params[0]
-                    for i in range(0, 15):
+                    cap = int(line.params[1]) if len(line.params) > 1 else 15
+                    for i in range(0, cap):
                         if i != 0:
                             ldi_insert.append(AsmLine("+   cmpi #" + str(i), 0))
                         ldi_insert.append(AsmLine("    jnz +", 0))
@@ -138,7 +140,7 @@ def main():
                         else:
                             ldi_insert.append(AsmLine("    ld " + addr + "+" + str(i), 0))
                         ldi_insert.append(AsmLine("    jmp ldi_end_" + str(line.num), 0))
-                    ldi_insert.append(AsmLine("+   ld " + addr + "+15", 0))
+                    ldi_insert.append(AsmLine("+   ld " + addr + "+" + str(cap), 0))
                     ldi_insert.append(AsmLine("ldi_end_" + str(line.num) + ":", 0))
                     break
 
