@@ -13,7 +13,7 @@ class AsmLine:
     name = ""
     value = ""
     local_label = ""
-    
+
     def __init__(self, text_line, num):
         self.line = text_line.strip("\n")
         self.num = num
@@ -148,7 +148,6 @@ def main():
             asm_lines.remove(asm_lines[ldi_index])
             asm_lines[ldi_index:ldi_index] = ldi_insert
             update_line_nums(asm_lines)
-                        
 
     # handle writebuf
     writebuf_found = True
@@ -168,7 +167,7 @@ def main():
                         params = ["'" + ch + "'" for ch in arg[1:-1]]
                     else:
                         params = arg.split(",")
-                    
+
                     buf_offset = 0
                     if buf.find("+") != -1:
                         buf_offset = int(buf.split("+")[1])
@@ -192,8 +191,7 @@ def main():
             asm_lines.remove(asm_lines[writebuf_index])
             asm_lines[writebuf_index:writebuf_index] = writebuf_insert
             update_line_nums(asm_lines)
-                    
-        
+
     # handle call/ret
     # Reserve one memory location for accumulator value
     tmp_found = False
@@ -204,7 +202,7 @@ def main():
                 tmp_found = True
             elif line.name == "RETURN_ADDRESS":
                 ret_found = True
-            
+
             if ret_found and tmp_found:
                 break
 
@@ -213,7 +211,7 @@ def main():
     if not ret_found:
         print("No RETURN_ADDRESS variable!")
 
-        
+
     calls = {}
     for i, line in enumerate(asm_lines):
         if line.is_instruction:
@@ -245,7 +243,7 @@ def main():
         label = ""
         insert_1 = []
         insert_2 = []
-        return_address = "RETURN_ADDRESS"        
+        return_address = "RETURN_ADDRESS"
 
         for i, line in enumerate(asm_lines):
             if line.is_instruction:
@@ -272,15 +270,15 @@ def main():
 
                     insert_1.append(AsmLine("    jmp " + label, 0))
                     insert_1.append(AsmLine(label + "_ret_" + str(count) + ":", 0))
-                    
+
                     if count == 0:
                         insert_2.append(AsmLine("    ld " + return_address, 0))
-                    else:    
+                    else:
                         insert_2.append(AsmLine("    cmpi #" + str(count), 0))
 
                     insert_2.append(AsmLine("    jz " + label + "_ret_" + str(count), 0))
                     break
-        
+
         if call_found:
             search_for_ret = False
             return_index = 0
@@ -298,21 +296,21 @@ def main():
                 elif line.is_label:
                     if line.value == asm_lines[call_index].params[0]:
                         search_for_ret = True
-        
+
             if return_index == 0:
                 print("No return index!!!")
                 break
-                    
+
             if calls[label][0] > calls[label][1]:
                 asm_lines.remove(asm_lines[return_index])
                 asm_lines[return_index:return_index] = [AsmLine("    jmp halt ; invalid return address", 0)]
 
 
             asm_lines[return_index:return_index] = insert_2
-            
+
             asm_lines.remove(asm_lines[call_index])
             asm_lines[call_index:call_index] = insert_1
-            
+
             update_line_nums(asm_lines)
 
 
