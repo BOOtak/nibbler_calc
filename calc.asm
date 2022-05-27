@@ -67,6 +67,7 @@
 
 #define DIGITS_BUF  $050
 #define NUMBER_BUF  $054
+#define OUTPUT_BUF  $058    ; 5 nibbles
 
 ; buttons
 #define DEBOUNCE_TIME_0 $F
@@ -311,18 +312,6 @@ display_op:
     jmp end_checks
 
 do_the_calc:
-    ld OP_IDX
-    jnz +
-    jmp perform_plus
-+   cmpi #1
-    jnz +
-    jmp perform_minus
-+   cmpi #2
-    jnz +
-    jmp perform_multiply
-+   jmp halt                ; invalid operation
-
-perform_minus:
     ld INPUT_BUF_1
     st DIGITS_BUF
     ld INPUT_BUF_1+1
@@ -363,6 +352,18 @@ perform_minus:
     ld NUMBER_BUF+3
     st SUB_BUF_2+3
 
+    ld OP_IDX
+    jnz +
+    jmp perform_plus
++   cmpi #1
+    jnz +
+    jmp perform_minus
++   cmpi #2
+    jnz +
+    jmp perform_multiply
++   jmp halt                ; invalid operation
+
+perform_minus:
     call sub_buf
 
     ld SUB_CARRY
@@ -372,6 +373,21 @@ perform_minus:
 
 +   call convert_output
 
+    ld RESULT_CARRY
+    jnz +
+    writebuf LCD_BUFFER+10 "-"
+    jmp ++
++   writebuf LCD_BUFFER+10 " "
+
+++  jmp print_result
+
+perform_plus:
+    call add_buf
+
+    call convert_output
+    writebuf LCD_BUFFER+10 " "
+
+print_result:
     lit #LCD_REG_COMMAND
     st LCD_CONTROL_STATE
 
@@ -385,65 +401,65 @@ perform_minus:
 
     ; display result
     lit #3
+    st LCD_BUFFER+9
     st LCD_BUFFER+7
     st LCD_BUFFER+5
     st LCD_BUFFER+3
     st LCD_BUFFER+1
 
-    ld DIGITS_BUF
+    ld OUTPUT_BUF
+    st LCD_BUFFER+8
+    ld OUTPUT_BUF+1
     st LCD_BUFFER+6
-    ld DIGITS_BUF+1
+    ld OUTPUT_BUF+2
     st LCD_BUFFER+4
-    ld DIGITS_BUF+2
+    ld OUTPUT_BUF+3
     st LCD_BUFFER+2
-    ld DIGITS_BUF+3
+    ld OUTPUT_BUF+4
     st LCD_BUFFER
 
-    ld RESULT_CARRY
-    jnz +
-    writebuf LCD_BUFFER+8 "-"
-    jmp ++
-+   writebuf LCD_BUFFER+8 " "
-
-++  lit #9
+    lit #11
     calli lcd_write_buffer
+    jmp end_checks
 
-perform_plus:
 perform_multiply:
 
 end_checks:
     jmp main_loop
 
-    ; clear input buf
-    lit #0
-    st INPUT_BUF_1
-    st INPUT_BUF_1+1
-    st INPUT_BUF_1+2
-    st INPUT_BUF_1+3
-
-    ; put number for subtraction
-    ld NUM_BUF_1
-    st SUB_BUF_1
-    ld NUM_BUF_1+1
-    st SUB_BUF_1+1
-    ld NUM_BUF_1+2
-    st SUB_BUF_1+2
-    ld NUM_BUF_1+3
-    st SUB_BUF_1+3
-
-    call convert_output
-
     jmp halt
 
 convert_output:
-    ; SUB_BUF_1 => DIGITS_BUF
+    ; SUB_BUF_1 => OUTPUT_BUF
     lit #0
-    st DIGITS_BUF
-    st DIGITS_BUF+1
-    st DIGITS_BUF+2
-    st DIGITS_BUF+3
+    st OUTPUT_BUF
+    st OUTPUT_BUF+1
+    st OUTPUT_BUF+2
+    st OUTPUT_BUF+3
+    st OUTPUT_BUF+4
+
+    ; 10000
+    lit #$0
+    st SUB_BUF_2
+    lit #$1
+    st SUB_BUF_2+1
+    lit #$7
+    st SUB_BUF_2+2
+    lit #$2
+    st SUB_BUF_2+3
+
+-   addi #0 ; NOP
+    call cmp_buf
+    ld SUB_CARRY
+    jnz +
+    call sub_buf
+    ld OUTPUT_BUF
+    addi #1
+    st OUTPUT_BUF
+    jmp -
+
     ; 1000
-    lit #$8
++   lit #$8
     st SUB_BUF_2
     lit #$E
     st SUB_BUF_2+1
@@ -457,9 +473,9 @@ convert_output:
     ld SUB_CARRY
     jnz +
     call sub_buf
-    ld DIGITS_BUF
+    ld OUTPUT_BUF+1
     addi #1
-    st DIGITS_BUF
+    st OUTPUT_BUF+1
     jmp -
     ; 100
 +   lit #$4
@@ -473,9 +489,9 @@ convert_output:
     ld SUB_CARRY
     jnz +
     call sub_buf
-    ld DIGITS_BUF+1
+    ld OUTPUT_BUF+2
     addi #1
-    st DIGITS_BUF+1
+    st OUTPUT_BUF+2
     jmp -
     ; 10
 +   lit #$A
@@ -487,13 +503,13 @@ convert_output:
     ld SUB_CARRY
     jnz +
     call sub_buf
-    ld DIGITS_BUF+2
+    ld OUTPUT_BUF+3
     addi #1
-    st DIGITS_BUF+2
+    st OUTPUT_BUF+3
     jmp -
     ; 1
 +   ld SUB_BUF_1
-    st DIGITS_BUF+3
+    st OUTPUT_BUF+4
     ret
 
 neg_buf:
@@ -616,6 +632,48 @@ sub_buf:
     st SUB_CARRY
 +   ret
 
+add_buf:
+    ld SUB_BUF_2
+    jz +
+    addm SUB_BUF_1  ; buf_1 - buf_2
+    st SUB_BUF_1
+    jnc +
+    ld SUB_BUF_1+1
+    addi #1
+    st SUB_BUF_1+1
+    jnc +
+    ld SUB_BUF_1+2
+    addi #1
+    st SUB_BUF_1+2
+    jnc +
+    ld SUB_BUF_1+3
+    addi #1
+    st SUB_BUF_1+3
++   ld SUB_BUF_2+1
+    jz +
+    addm SUB_BUF_1+1
+    st SUB_BUF_1+1
+    jnc +
+    ld SUB_BUF_1+2
+    addi #1
+    st SUB_BUF_1+2
+    jnc +
+    ld SUB_BUF_1+3
+    addi #1
+    st SUB_BUF_1+3
++   ld SUB_BUF_2+2
+    jz +
+    addm SUB_BUF_1+2
+    st SUB_BUF_1+2
+    jnc +
+    ld SUB_BUF_1+3
+    addi #1
+    st SUB_BUF_1+3
++   ld SUB_BUF_2+3
+    jz +
+    addm SUB_BUF_1+3
+    st SUB_BUF_1+3
++   ret
 
 convert_input:
     ; input[0]
