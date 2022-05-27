@@ -178,8 +178,12 @@ def main():
                         print("Buffer is TOO LONG!!!")
                         break
 
-                    for param in params:
-                        writebuf_insert.append(AsmLine("    lit #<" + param, 0))
+                    for j, param in enumerate(params):
+                        prefix = ""
+                        if j == 0:
+                            prefix = line.local_label
+
+                        writebuf_insert.append(AsmLine("{0:4}lit #<{1}".format(prefix, param), 0))
                         writebuf_insert.append(AsmLine("    st " + buf + "+" + str(buf_idx), 0))
                         buf_idx = buf_idx - 1
                         writebuf_insert.append(AsmLine("    lit #>" + param, 0))
@@ -261,9 +265,11 @@ def main():
                         return_address = "RETURN_ADDRESS_" + str(depth)
                     calls[label][0] = calls[label][0] + 1
                     if line.opcode == "calli":
-                        insert_1.append(AsmLine("    st TMP", 0))
+                        insert_1.append(AsmLine("{0:4}st TMP".format(line.local_label), 0))
+                        insert_1.append(AsmLine("    lit #" + str(count), 0))
+                    else:
+                        insert_1.append(AsmLine("{0:4}lit #{1}".format(line.local_label, count), 0))
 
-                    insert_1.append(AsmLine("    lit #" + str(count), 0))
                     insert_1.append(AsmLine("    st " + return_address, 0))
                     if line.opcode == "calli":
                         insert_1.append(AsmLine("    ld TMP", 0))
