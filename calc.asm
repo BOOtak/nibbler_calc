@@ -65,9 +65,17 @@
 #define TMP $048
 #define TMP_1 $049
 
+#define RETURN_ADDRESS_2 $04A
+#define RETURN_ADDRESS_3 $04B
+
 #define DIGITS_BUF  $050
 #define NUMBER_BUF  $054
 #define OUTPUT_BUF  $058    ; 5 nibbles
+
+#define MUL_NIBBLE  $05D
+#define ADD_BUF_CARRY $05E
+#define MUL_BUF_1   $060    ; 4 nibbles
+#define MUL_BUF_2   $064    ; 4 nibbles
 
 ; buttons
 #define DEBOUNCE_TIME_0 $F
@@ -381,6 +389,20 @@ perform_minus:
 
 ++  jmp print_result
 
+perform_multiply:
+    lit #0
+    st ADD_BUF_CARRY
+
+    call mul_buf
+    call convert_output
+
+    ld ADD_BUF_CARRY
+    jnz +
+    writebuf LCD_BUFFER+10 " "
+    jmp ++
++   writebuf LCD_BUFFER+10 "E"
+++  jmp print_result
+
 perform_plus:
     call add_buf
 
@@ -421,8 +443,6 @@ print_result:
     lit #11
     calli lcd_write_buffer
     jmp end_checks
-
-perform_multiply:
 
 end_checks:
     jmp main_loop
@@ -632,7 +652,119 @@ sub_buf:
     st SUB_CARRY
 +   ret
 
+mul_buf:
+    ; SUB_BUF_1 = SUB_BUF_1 * SUB_BUF_2
+    ld SUB_BUF_1
+    st MUL_BUF_1
+    ld SUB_BUF_1+1
+    st MUL_BUF_1+1
+    ld SUB_BUF_1+2
+    st MUL_BUF_1+2
+    ld SUB_BUF_1+3
+    st MUL_BUF_1+3
+
+    ld SUB_BUF_2
+    st MUL_BUF_2
+    ld SUB_BUF_2+1
+    st MUL_BUF_2+1
+    ld SUB_BUF_2+2
+    st MUL_BUF_2+2
+    ld SUB_BUF_2+3
+    st MUL_BUF_2+3
+
+    lit #0
+    st SUB_BUF_1
+    st SUB_BUF_1+1
+    st SUB_BUF_1+2
+    st SUB_BUF_1+3
+
+    ld MUL_BUF_2+3
+    st MUL_NIBBLE
+    call mul_buf_nibble
+    ld MUL_BUF_2+2
+    st MUL_NIBBLE
+    call mul_buf_nibble
+    ld MUL_BUF_2+1
+    st MUL_NIBBLE
+    call mul_buf_nibble
+    ld MUL_BUF_2
+    st MUL_NIBBLE
+    call mul_buf_nibble
+    ret
+
+mul_buf_nibble:
+    ; SUB_BUF_1 = MUL_BUF_1 * MUL_NIBBLE
+    call mul_buf_2
+    ld MUL_NIBBLE
+    _andi #$8
+    jz +
+    ld MUL_BUF_1
+    st SUB_BUF_2
+    ld MUL_BUF_1+1
+    st SUB_BUF_2+1
+    ld MUL_BUF_1+2
+    st SUB_BUF_2+2
+    ld MUL_BUF_1+3
+    st SUB_BUF_2+3
+    call add_buf
++   call mul_buf_2
+    ld MUL_NIBBLE
+    _andi #$4
+    jz +
+    ld MUL_BUF_1
+    st SUB_BUF_2
+    ld MUL_BUF_1+1
+    st SUB_BUF_2+1
+    ld MUL_BUF_1+2
+    st SUB_BUF_2+2
+    ld MUL_BUF_1+3
+    st SUB_BUF_2+3
+    call add_buf
++   call mul_buf_2
+    ld MUL_NIBBLE
+    _andi #$2
+    jz +
+    ld MUL_BUF_1
+    st SUB_BUF_2
+    ld MUL_BUF_1+1
+    st SUB_BUF_2+1
+    ld MUL_BUF_1+2
+    st SUB_BUF_2+2
+    ld MUL_BUF_1+3
+    st SUB_BUF_2+3
+    call add_buf
++   call mul_buf_2
+    ld MUL_NIBBLE
+    _andi #$1
+    jz +
+    ld MUL_BUF_1
+    st SUB_BUF_2
+    ld MUL_BUF_1+1
+    st SUB_BUF_2+1
+    ld MUL_BUF_1+2
+    st SUB_BUF_2+2
+    ld MUL_BUF_1+3
+    st SUB_BUF_2+3
+    call add_buf
++   ret
+
+mul_buf_2:
+    ; SUB_BUF_2 = SUB_BUF_1
+    ; SUB_BUF_1 = SUB_BUF_1 + SUB_BUF_2
+    ld SUB_BUF_1
+    st SUB_BUF_2
+    ld SUB_BUF_1+1
+    st SUB_BUF_2+1
+    ld SUB_BUF_1+2
+    st SUB_BUF_2+2
+    ld SUB_BUF_1+3
+    st SUB_BUF_2+3
+    call add_buf
+    addi #0
+    ret
+
 add_buf:
+    ; SUB_BUF_1 = SUB_BUF_1 + SUB_BUF_2
     ld SUB_BUF_2
     jz +
     addm SUB_BUF_1  ; buf_1 - buf_2
@@ -649,6 +781,9 @@ add_buf:
     ld SUB_BUF_1+3
     addi #1
     st SUB_BUF_1+3
+    jnc +
+    lit #1
+    st ADD_BUF_CARRY
 +   ld SUB_BUF_2+1
     jz +
     addm SUB_BUF_1+1
@@ -661,6 +796,9 @@ add_buf:
     ld SUB_BUF_1+3
     addi #1
     st SUB_BUF_1+3
+    jnc +
+    lit #1
+    st ADD_BUF_CARRY
 +   ld SUB_BUF_2+2
     jz +
     addm SUB_BUF_1+2
@@ -669,10 +807,16 @@ add_buf:
     ld SUB_BUF_1+3
     addi #1
     st SUB_BUF_1+3
+    jnc +
+    lit #1
+    st ADD_BUF_CARRY
 +   ld SUB_BUF_2+3
     jz +
     addm SUB_BUF_1+3
     st SUB_BUF_1+3
+    jnc +
+    lit #1
+    st ADD_BUF_CARRY
 +   ret
 
 convert_input:
