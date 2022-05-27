@@ -54,13 +54,13 @@
 #define SUB_BUF_1 $030
 #define SUB_BUF_2 $034
 #define SUB_CARRY $041
-#define DEBOUNCE_COUNTER_0 $042
-#define DEBOUNCE_COUNTER_1 $043
-#define DEBOUNCE_COUNTER_2 $044
+#define RESULT_CARRY $042
+#define DEBOUNCE_COUNTER_0 $043
+#define DEBOUNCE_COUNTER_1 $044
+#define DEBOUNCE_COUNTER_2 $045
 
-#define DIGIT_OP_FLAG $045
-
-#define OP_IDX $046
+#define DIGIT_OP_FLAG $046
+#define OP_IDX $047
 
 #define TMP $048
 #define TMP_1 $049
@@ -97,11 +97,11 @@ start:
     lit #0
     st INPUT_BUF_INDEX
 
-    lit #9
+    lit #0
     st INPUT_BUF_1
-    lit #8
+    lit #0
     st INPUT_BUF_1+1
-    lit #7
+    lit #0
     st INPUT_BUF_1+2
     lit #6
     st INPUT_BUF_1+3
@@ -110,6 +110,7 @@ start:
     st INPUT_BUF_2
     st INPUT_BUF_2+1
     st INPUT_BUF_2+2
+    lit #9
     st INPUT_BUF_2+3
 
     ; prepare to send an LCD command
@@ -173,7 +174,7 @@ check_right_pressed:
     jz check_left_pressed
     ld INPUT_BUF_INDEX
     cmpi #8
-    jz end_checks
+    jz do_the_calc
     addi #1
     st INPUT_BUF_INDEX
     jmp end_checks
@@ -307,8 +308,21 @@ display_op:
 +   jmp halt                ; invalid operation
 ++  lit #1
     calli lcd_write_buffer
+    jmp end_checks
 
-end_checks:
+do_the_calc:
+    ld OP_IDX
+    jnz +
+    jmp perform_plus
++   cmpi #1
+    jnz +
+    jmp perform_minus
++   cmpi #2
+    jnz +
+    jmp perform_multiply
++   jmp halt                ; invalid operation
+
+perform_minus:
     ld INPUT_BUF_1
     st DIGITS_BUF
     ld INPUT_BUF_1+1
@@ -320,6 +334,84 @@ end_checks:
 
     call convert_input
 
+    ld NUMBER_BUF
+    st SUB_BUF_1
+    ld NUMBER_BUF+1
+    st SUB_BUF_1+1
+    ld NUMBER_BUF+2
+    st SUB_BUF_1+2
+    ld NUMBER_BUF+3
+    st SUB_BUF_1+3
+
+    ld INPUT_BUF_2
+    st DIGITS_BUF
+    ld INPUT_BUF_2+1
+    st DIGITS_BUF+1
+    ld INPUT_BUF_2+2
+    st DIGITS_BUF+2
+    ld INPUT_BUF_2+3
+    st DIGITS_BUF+3
+
+    call convert_input
+
+    ld NUMBER_BUF
+    st SUB_BUF_2
+    ld NUMBER_BUF+1
+    st SUB_BUF_2+1
+    ld NUMBER_BUF+2
+    st SUB_BUF_2+2
+    ld NUMBER_BUF+3
+    st SUB_BUF_2+3
+
+    call sub_buf
+
+    ld SUB_CARRY
+    st RESULT_CARRY
+    jnz +
+    call neg_buf
+
++   call convert_output
+
+    lit #LCD_REG_COMMAND
+    st LCD_CONTROL_STATE
+
+    writebuf LCD_BUFFER LCD_COMMAND_CURSOR_POS_LINE_2
+    lit #1
+    calli lcd_write_buffer
+
+    ; prepare to send LCD character data
+    lit #LCD_REG_DATA
+    st LCD_CONTROL_STATE
+
+    ; display result
+    lit #3
+    st LCD_BUFFER+7
+    st LCD_BUFFER+5
+    st LCD_BUFFER+3
+    st LCD_BUFFER+1
+
+    ld DIGITS_BUF
+    st LCD_BUFFER+6
+    ld DIGITS_BUF+1
+    st LCD_BUFFER+4
+    ld DIGITS_BUF+2
+    st LCD_BUFFER+2
+    ld DIGITS_BUF+3
+    st LCD_BUFFER
+
+    ld RESULT_CARRY
+    jnz +
+    writebuf LCD_BUFFER+8 "-"
+    jmp ++
++   writebuf LCD_BUFFER+8 " "
+
+++  lit #9
+    calli lcd_write_buffer
+
+perform_plus:
+perform_multiply:
+
+end_checks:
     jmp main_loop
 
     ; clear input buf
@@ -344,6 +436,12 @@ end_checks:
     jmp halt
 
 convert_output:
+    ; SUB_BUF_1 => DIGITS_BUF
+    lit #0
+    st DIGITS_BUF
+    st DIGITS_BUF+1
+    st DIGITS_BUF+2
+    st DIGITS_BUF+3
     ; 1000
     lit #$8
     st SUB_BUF_2
@@ -359,9 +457,9 @@ convert_output:
     ld SUB_CARRY
     jnz +
     call sub_buf
-    ld INPUT_BUF_1
+    ld DIGITS_BUF
     addi #1
-    st INPUT_BUF_1
+    st DIGITS_BUF
     jmp -
     ; 100
 +   lit #$4
@@ -375,9 +473,9 @@ convert_output:
     ld SUB_CARRY
     jnz +
     call sub_buf
-    ld INPUT_BUF_1+1
+    ld DIGITS_BUF+1
     addi #1
-    st INPUT_BUF_1+1
+    st DIGITS_BUF+1
     jmp -
     ; 10
 +   lit #$A
@@ -389,14 +487,45 @@ convert_output:
     ld SUB_CARRY
     jnz +
     call sub_buf
-    ld INPUT_BUF_1+2
+    ld DIGITS_BUF+2
     addi #1
-    st INPUT_BUF_1+2
+    st DIGITS_BUF+2
     jmp -
     ; 1
 +   ld SUB_BUF_1
-    st INPUT_BUF_1+3
+    st DIGITS_BUF+3
     ret
+
+neg_buf:
+    ld SUB_BUF_1
+    nori #0 ; not
+    st SUB_BUF_1
+    ld SUB_BUF_1+1
+    nori #0 ; not
+    st SUB_BUF_1+1
+    ld SUB_BUF_1+2
+    nori #0 ; not
+    st SUB_BUF_1+2
+    ld SUB_BUF_1+3
+    nori #0 ; not
+    st SUB_BUF_1+3
+    ld SUB_BUF_1
+    addi #1
+    st SUB_BUF_1
+    jnc +
+    ld SUB_BUF_1+1
+    addi #1
+    st SUB_BUF_1+1
+    jnc +
+    ld SUB_BUF_1+2
+    addi #1
+    st SUB_BUF_1+2
+    jnc +
+    ld SUB_BUF_1+3
+    addi #1
+    st SUB_BUF_1+3
+    ; TODO: handle carry
++   ret
 
 cmp_buf:
     ld SUB_BUF_2+3
@@ -443,6 +572,9 @@ sub_buf:
     ld SUB_BUF_1+3
     addi #-1
     st SUB_BUF_1+3
+    jc +
+    lit #0
+    st SUB_CARRY
 +   ld SUB_BUF_2+1
     jz +
     nori #0 ; not
@@ -457,6 +589,9 @@ sub_buf:
     ld SUB_BUF_1+3
     addi #-1
     st SUB_BUF_1+3
+    jc +
+    lit #0
+    st SUB_CARRY
 +   ld SUB_BUF_2+2
     jz +
     nori #0 ; not
@@ -467,6 +602,9 @@ sub_buf:
     ld SUB_BUF_1+3
     addi #-1
     st SUB_BUF_1+3
+    jc +
+    lit #0
+    st SUB_CARRY
 +   ld SUB_BUF_2+3
     jz +
     nori #0 ; not
