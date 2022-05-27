@@ -134,7 +134,7 @@ def main():
                     for i in range(0, cap):
                         if i != 0:
                             ldi_insert.append(AsmLine("+   cmpi #" + str(i), 0))
-                        ldi_insert.append(AsmLine("    jnz +", 0))
+                        ldi_insert.append(AsmLine("{0:4}jnz +".format(line.local_label), 0))
                         if i == 0:
                             ldi_insert.append(AsmLine("    ld " + addr, 0))
                         else:

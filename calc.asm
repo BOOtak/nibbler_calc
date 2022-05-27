@@ -7,10 +7,21 @@
 
 ; Bit flags in LCDCONTROL port
 #define LCD_REG_COMMAND $4
+#define LCD_REG_DATA $6
 
 ; LCD commands
 #define LCD_COMMAND_INTERFACE8 $3C  ; 8-bit interface, 2-line display, 5x10 font
 #define LCD_COMMAND_INTERFACE4 $2C  ; 4-bit interface, 2-line display, 5x10 font
+#define LCD_COMMAND_DISPLAY $0F     ; display on, cursor on, blinking cursor on
+#define LCD_COMMAND_CLEAR $01       ; clear display, home cursor
+#define LCD_COMMAND_CURSOR_POS_LINE_1 $80 ; OR the desired cursor position with $80 to create a cursor position command. Line 2 begins at pos 64
+#define LCD_COMMAND_CURSOR_POS_LINE_2 $C0  
+#define LCD_COMMAND_CURSOR_SHIFT_LEFT $10
+#define LCD_COMMAND_CURSOR_SHIFT_RIGHT $14
+
+; digits operations
+#define DIGIT_OP_INC $1
+#define DIGIT_OP_DEC $2
 
 ; LCD timing constants
 #define LCD_CLEAR_HOME_DELAY_US 1520
@@ -46,7 +57,16 @@
 #define DEBOUNCE_COUNTER_0 $042
 #define DEBOUNCE_COUNTER_1 $043
 #define DEBOUNCE_COUNTER_2 $044
+
+#define DIGIT_OP_FLAG $045
+
+#define OP_IDX $046
+
 #define TMP $048
+#define TMP_1 $049
+
+#define DIGITS_BUF  $050
+#define NUMBER_BUF  $054
 
 ; buttons
 #define DEBOUNCE_TIME_0 $F
@@ -61,44 +81,19 @@
 #define BUTTON_UP $8
 #define BUTTON_NOT_UP $7
 
-init_lcd:
-; To initialize the LCD from an unknown state, we must first set it to 8-bit mode three times. Then it can be set to 4-bit mode.
+start:
+    call init_lcd
 
     ; prepare to send an LCD command
     lit #LCD_REG_COMMAND
     st LCD_CONTROL_STATE
 
-    ; the command is INTERFACE8
-    lit #<LCD_COMMAND_INTERFACE8
-    st LCD_BUFFER
-    ; zero more nibbles to read from the buffer
-    lit #0
+    writebuf LCD_BUFFER LCD_COMMAND_INTERFACE4,LCD_COMMAND_DISPLAY,LCD_COMMAND_CLEAR
+
+    lit #5
     calli lcd_write_buffer
     call lcd_long_delay
 
-    ; the command is INTERFACE8
-    lit #<LCD_COMMAND_INTERFACE8
-    st LCD_BUFFER
-    lit #0
-    calli lcd_write_buffer
-    call lcd_long_delay
-
-    ; the command is INTERFACE8
-    lit #<LCD_COMMAND_INTERFACE8
-    st LCD_BUFFER
-    ; zero more nibbles to read from the buffer
-    lit #0
-    calli lcd_write_buffer
-
-    ; the command is INTERFACE4
-    lit #<LCD_COMMAND_INTERFACE4
-    st LCD_BUFFER
-    ; zero more nibbles to read from the buffer
-    lit #0
-    calli lcd_write_buffer
-
-    ; The LCD is now in 4-bit mode, and we can send byte-wide commands as a pair of nibble, high nibble first.
-start:
     lit #0
     st INPUT_BUF_INDEX
 
@@ -111,7 +106,64 @@ start:
     lit #6
     st INPUT_BUF_1+3
 
+    lit #0
+    st INPUT_BUF_2
+    st INPUT_BUF_2+1
+    st INPUT_BUF_2+2
+    st INPUT_BUF_2+3
+
+    ; prepare to send an LCD command
+    lit #LCD_REG_COMMAND
+    st LCD_CONTROL_STATE
+
+    writebuf LCD_BUFFER LCD_COMMAND_CURSOR_POS_LINE_1
+    lit #1
+    calli lcd_write_buffer
+
+    ; prepare to send LCD character data
+    lit #LCD_REG_DATA
+    st LCD_CONTROL_STATE
+
+    ; fill LCD buf with digits
+    lit #3
+    st LCD_BUFFER+7
+    st LCD_BUFFER+5
+    st LCD_BUFFER+3
+    st LCD_BUFFER+1
+
+    ld INPUT_BUF_1
+    st LCD_BUFFER+6
+    ld INPUT_BUF_1+1
+    st LCD_BUFFER+4
+    ld INPUT_BUF_1+2
+    st LCD_BUFFER+2
+    ld INPUT_BUF_1+3
+    st LCD_BUFFER
+
+    lit #7
+    calli lcd_write_buffer
+
+    writebuf LCD_BUFFER "+"
+    lit #1
+    calli lcd_write_buffer
+
+    lit #3
+    st LCD_BUFFER+1
+
+    ld INPUT_BUF_2
+    st LCD_BUFFER+6
+    ld INPUT_BUF_2+1
+    st LCD_BUFFER+4
+    ld INPUT_BUF_2+2
+    st LCD_BUFFER+2
+    ld INPUT_BUF_2+3
+    st LCD_BUFFER
+
+    lit #7
+    calli lcd_write_buffer
+
 main_loop:
+
     call wait_for_button
 
 check_right_pressed:
@@ -120,7 +172,7 @@ check_right_pressed:
     norm NEW_BUTTON_STATE
     jz check_left_pressed
     ld INPUT_BUF_INDEX
-    cmpi #3
+    cmpi #8
     jz end_checks
     addi #1
     st INPUT_BUF_INDEX
@@ -140,30 +192,134 @@ check_down_pressed:
     lit #BUTTON_NOT_DOWN
     norm NEW_BUTTON_STATE
     jz check_up_pressed
-    ld INPUT_BUF_INDEX
-    ldi INPUT_BUF_1 3
-    jz end_checks
-    addi #-1
-    st TMP
-    ld INPUT_BUF_INDEX
-    sti INPUT_BUF_1 TMP 3
-    jmp end_checks
+    lit #DIGIT_OP_DEC
+    st DIGIT_OP_FLAG
+    jmp change_number
 
 check_up_pressed:
     lit #BUTTON_NOT_UP
     norm NEW_BUTTON_STATE
     jz end_checks
+    lit #DIGIT_OP_INC
+    st DIGIT_OP_FLAG
+    jmp change_number
+
+change_number:
     ld INPUT_BUF_INDEX
+    calli cursor_set_pos_line1
+    lit #LCD_REG_DATA
+    st LCD_CONTROL_STATE
+
+    ld INPUT_BUF_INDEX
+    cmpi #4             ; idx < 4 => first buffer
+    jnc ++
+    jz change_op       ; idx == 4 => operation
+    addi #-5            ; else: idx > 4 => second buffer
+    ldi INPUT_BUF_2 3
+    jmp +++
+++  ld INPUT_BUF_INDEX
     ldi INPUT_BUF_1 3
++++ st TMP_1
+    ld DIGIT_OP_FLAG
+    cmpi #DIGIT_OP_INC
+    jz to_inc
+    cmpi #DIGIT_OP_DEC
+    jz to_dec
+    ; invalid op
+    jmp halt
+
+to_inc:
+    ld TMP_1
     cmpi #9
-    jc end_checks   ; >= 9
+    jc +
     addi #1
-    st TMP
+    jmp ++
++   lit #0
+++  st TMP_1
+    jmp +++
+
+to_dec:
+    ld TMP_1
+    jz +
+    addi #-1
+    jmp ++
++   lit #9
+++  st TMP_1
+
+    ; print digit on the screen
++++ ld TMP_1
+    st LCD_BUFFER
+    lit #3
+    st LCD_BUFFER+1
+    lit #1
+    calli lcd_write_buffer
+
     ld INPUT_BUF_INDEX
-    sti INPUT_BUF_1 TMP 3
+    cmpi #4                 ; idx < 4 => first buffer
+    jnc ++
+    jz halt           ; idx == 4 => operation; should not end up here; halt
+    addi #-5                ; else: idx > 4 => second buffer
+    sti INPUT_BUF_2 TMP_1 3
+    jmp end_checks
+++  ld INPUT_BUF_INDEX
+    sti INPUT_BUF_1 TMP_1 3
+    jmp end_checks
+
+change_op:
+    ld DIGIT_OP_FLAG
+    cmpi #DIGIT_OP_INC
+    jz op_inc
+    cmpi #DIGIT_OP_DEC
+    jz op_dec
+    jmp halt
+
+op_inc:
+    ld OP_IDX
+    cmpi #2
+    jz +
+    addi #1
+    jmp ++
++   lit #0
+++  st OP_IDX
+    jmp display_op
+
+op_dec:
+    ld OP_IDX
+    jz +
+    addi #-1
+    jmp ++
++   lit #2
+++  st OP_IDX
+
+display_op:
+    ld OP_IDX
+    jnz +
+    writebuf LCD_BUFFER "+" ; 0: PLUS
+    jmp ++
++   cmpi #1
+    jnz +
+    writebuf LCD_BUFFER "-" ; 1: MINUS
+    jmp ++
++   cmpi #2
+    jnz +
+    writebuf LCD_BUFFER "*" ; 2: MULTIPLY
+    jmp ++
++   jmp halt                ; invalid operation
+++  lit #1
+    calli lcd_write_buffer
 
 end_checks:
+    ld INPUT_BUF_1
+    st DIGITS_BUF
+    ld INPUT_BUF_1+1
+    st DIGITS_BUF+1
+    ld INPUT_BUF_1+2
+    st DIGITS_BUF+2
+    ld INPUT_BUF_1+3
+    st DIGITS_BUF+3
+
     call convert_input
+
     jmp main_loop
 
     ; clear input buf
@@ -325,95 +481,95 @@ sub_buf:
 
 convert_input:
     ; input[0]
-    ld INPUT_BUF_1
+    ld DIGITS_BUF
     ; input[0] * 10
     calli mul10
     ; store result
     ld MUL_RES+1
-    st NUM_BUF_1+1
+    st NUMBER_BUF+1
     ; input[0] * 10 + input[1]
     ld MUL_RES
-    addm INPUT_BUF_1+1
+    addm DIGITS_BUF+1
     ; store result
-    st NUM_BUF_1
+    st NUMBER_BUF
     jnc +
-    ld NUM_BUF_1+1
+    ld NUMBER_BUF+1
     addi #1
-    st NUM_BUF_1+1
-+   ld NUM_BUF_1+1
+    st NUMBER_BUF+1
++   ld NUMBER_BUF+1
     ; <((input[0] * 10 + input[1]) * 10)
     calli mul10
     ld MUL_RES
-    st NUM_BUF_1+1
+    st NUMBER_BUF+1
     ld MUL_RES+1
-    st NUM_BUF_1+2
-    ld NUM_BUF_1
+    st NUMBER_BUF+2
+    ld NUMBER_BUF
     ; >((input[0] * 10 + input[1]) * 10)
     calli mul10
     ld MUL_RES+1
-    addm NUM_BUF_1+1
-    st NUM_BUF_1+1
+    addm NUMBER_BUF+1
+    st NUMBER_BUF+1
     jnc +
-    ld NUM_BUF_1+2
+    ld NUMBER_BUF+2
     addi #1
-    st NUM_BUF_1+2
+    st NUMBER_BUF+2
 +   ld MUL_RES
     ; (input[0] * 10 + input[1]) * 10 + input[2]
-    addm INPUT_BUF_1+2
-    st NUM_BUF_1
+    addm DIGITS_BUF+2
+    st NUMBER_BUF
     jnc +
-    ld NUM_BUF_1+1
+    ld NUMBER_BUF+1
     addi #1
-    st NUM_BUF_1+1
+    st NUMBER_BUF+1
     ; ((input[0] * 10 + input[1]) * 10 + input[2]) * 10
-+   ld NUM_BUF_1+2
++   ld NUMBER_BUF+2
     calli mul10
     ld MUL_RES+1
-    st NUM_BUF_1+3
+    st NUMBER_BUF+3
     ld MUL_RES
-    st NUM_BUF_1+2
-    ld NUM_BUF_1+1
+    st NUMBER_BUF+2
+    ld NUMBER_BUF+1
     calli mul10
     ld MUL_RES+1
-    addm NUM_BUF_1+2
-    st NUM_BUF_1+2
+    addm NUMBER_BUF+2
+    st NUMBER_BUF+2
     jnc +
-    ld NUM_BUF_1+3
+    ld NUMBER_BUF+3
     addi #1
-    st NUM_BUF_1+3
+    st NUMBER_BUF+3
 +   ld MUL_RES
-    st NUM_BUF_1+1
-    ld NUM_BUF_1
+    st NUMBER_BUF+1
+    ld NUMBER_BUF
     calli mul10
     ld MUL_RES+1
-    addm NUM_BUF_1+1
-    st NUM_BUF_1+1
+    addm NUMBER_BUF+1
+    st NUMBER_BUF+1
     jnc +
-    ld NUM_BUF_1+2
+    ld NUMBER_BUF+2
     addi #1
-    st NUM_BUF_1+2
+    st NUMBER_BUF+2
     jnc +
-    ld NUM_BUF_1+3
+    ld NUMBER_BUF+3
     addi #1
-    st NUM_BUF_1+3
+    st NUMBER_BUF+3
 +   ld MUL_RES
-    st NUM_BUF_1
+    st NUMBER_BUF
     ; ((input[0] * 10 + input[1]) * 10 + input[2]) * 10 + input[3]
-    ld INPUT_BUF_1+3
-    addm NUM_BUF_1
-    st NUM_BUF_1
+    ld DIGITS_BUF+3
+    addm NUMBER_BUF
+    st NUMBER_BUF
     jnc +
-    ld NUM_BUF_1+1
+    ld NUMBER_BUF+1
     addi #1
-    st NUM_BUF_1+1
+    st NUMBER_BUF+1
     jnc +
-    ld NUM_BUF_1+2
+    ld NUMBER_BUF+2
     addi #1
-    st NUM_BUF_1+2
+    st NUMBER_BUF+2
     jnc +
-    ld NUM_BUF_1+3
+    ld NUMBER_BUF+3
     addi #1
-    st NUM_BUF_1+3
+    st NUMBER_BUF+3
 +   ret
 
 mul10:
@@ -521,6 +677,60 @@ debounce:
     ret
 
 ; ===== LCD ===== 
+
+cursor_set_pos_line1:
+    ; accumulator = cursor position at line 1
+    st LCD_BUFFER
+    lit #<LCD_COMMAND_CURSOR_POS_LINE_1
+    st LCD_BUFFER+1
+
+    ; prepare to send an LCD command
+    lit #LCD_REG_COMMAND
+    st LCD_CONTROL_STATE
+
+    lit #1
+    calli lcd_write_buffer
+    ret
+
+init_lcd:
+; To initialize the LCD from an unknown state, we must first set it to 8-bit mode three times. Then it can be set to 4-bit mode.
+
+    ; prepare to send an LCD command
+    lit #LCD_REG_COMMAND
+    st LCD_CONTROL_STATE
+
+    ; the command is INTERFACE8
+    lit #<LCD_COMMAND_INTERFACE8
+    st LCD_BUFFER
+    ; zero more nibbles to read from the buffer
+    lit #0
+    calli lcd_write_buffer
+    call lcd_long_delay
+
+    ; the command is INTERFACE8
+    lit #<LCD_COMMAND_INTERFACE8
+    st LCD_BUFFER
+    lit #0
+    calli lcd_write_buffer
+    call lcd_long_delay
+
+    ; the command is INTERFACE8
+    lit #<LCD_COMMAND_INTERFACE8
+    st LCD_BUFFER
+    ; zero more nibbles to read from the buffer
+    lit #0
+    calli lcd_write_buffer
+
+    ; the command is INTERFACE4
+    lit #<LCD_COMMAND_INTERFACE4
+    st LCD_BUFFER
+    ; zero more nibbles to read from the buffer
+    lit #0
+    calli lcd_write_buffer
+
+    ret
+
+    ; The LCD is now in 4-bit mode, and we can send byte-wide commands as a pair of nibble, high nibble first.
 
 ; use LCD_BUFFER_INDEX to get the next nibble from LCD_BUFFER, and put it in LCD_NIBBLE
 lcd_write_buffer:
