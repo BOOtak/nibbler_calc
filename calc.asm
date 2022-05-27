@@ -320,45 +320,13 @@ display_op:
     jmp end_checks
 
 do_the_calc:
-    ld INPUT_BUF_1
-    st DIGITS_BUF
-    ld INPUT_BUF_1+1
-    st DIGITS_BUF+1
-    ld INPUT_BUF_1+2
-    st DIGITS_BUF+2
-    ld INPUT_BUF_1+3
-    st DIGITS_BUF+3
-
+    cpbuf INPUT_BUF_1 DIGITS_BUF 4
     call convert_input
+    cpbuf NUMBER_BUF SUB_BUF_1 4
 
-    ld NUMBER_BUF
-    st SUB_BUF_1
-    ld NUMBER_BUF+1
-    st SUB_BUF_1+1
-    ld NUMBER_BUF+2
-    st SUB_BUF_1+2
-    ld NUMBER_BUF+3
-    st SUB_BUF_1+3
-
-    ld INPUT_BUF_2
-    st DIGITS_BUF
-    ld INPUT_BUF_2+1
-    st DIGITS_BUF+1
-    ld INPUT_BUF_2+2
-    st DIGITS_BUF+2
-    ld INPUT_BUF_2+3
-    st DIGITS_BUF+3
-
+    cpbuf INPUT_BUF_2 DIGITS_BUF 4
     call convert_input
-
-    ld NUMBER_BUF
-    st SUB_BUF_2
-    ld NUMBER_BUF+1
-    st SUB_BUF_2+1
-    ld NUMBER_BUF+2
-    st SUB_BUF_2+2
-    ld NUMBER_BUF+3
-    st SUB_BUF_2+3
+    cpbuf NUMBER_BUF SUB_BUF_2 4
 
     ld OP_IDX
     jnz +
@@ -654,23 +622,8 @@ sub_buf:
 
 mul_buf:
     ; SUB_BUF_1 = SUB_BUF_1 * SUB_BUF_2
-    ld SUB_BUF_1
-    st MUL_BUF_1
-    ld SUB_BUF_1+1
-    st MUL_BUF_1+1
-    ld SUB_BUF_1+2
-    st MUL_BUF_1+2
-    ld SUB_BUF_1+3
-    st MUL_BUF_1+3
-
-    ld SUB_BUF_2
-    st MUL_BUF_2
-    ld SUB_BUF_2+1
-    st MUL_BUF_2+1
-    ld SUB_BUF_2+2
-    st MUL_BUF_2+2
-    ld SUB_BUF_2+3
-    st MUL_BUF_2+3
+    cpbuf SUB_BUF_1 MUL_BUF_1 4
+    cpbuf SUB_BUF_2 MUL_BUF_2 4
 
     lit #0
     st SUB_BUF_1
@@ -698,67 +651,32 @@ mul_buf_nibble:
     ld MUL_NIBBLE
     _andi #$8
     jz +
-    ld MUL_BUF_1
-    st SUB_BUF_2
-    ld MUL_BUF_1+1
-    st SUB_BUF_2+1
-    ld MUL_BUF_1+2
-    st SUB_BUF_2+2
-    ld MUL_BUF_1+3
-    st SUB_BUF_2+3
+    cpbuf MUL_BUF_1 SUB_BUF_2 4
     call add_buf
 +   call mul_buf_2
     ld MUL_NIBBLE
     _andi #$4
     jz +
-    ld MUL_BUF_1
-    st SUB_BUF_2
-    ld MUL_BUF_1+1
-    st SUB_BUF_2+1
-    ld MUL_BUF_1+2
-    st SUB_BUF_2+2
-    ld MUL_BUF_1+3
-    st SUB_BUF_2+3
+    cpbuf MUL_BUF_1 SUB_BUF_2 4
     call add_buf
 +   call mul_buf_2
     ld MUL_NIBBLE
     _andi #$2
     jz +
-    ld MUL_BUF_1
-    st SUB_BUF_2
-    ld MUL_BUF_1+1
-    st SUB_BUF_2+1
-    ld MUL_BUF_1+2
-    st SUB_BUF_2+2
-    ld MUL_BUF_1+3
-    st SUB_BUF_2+3
+    cpbuf MUL_BUF_1 SUB_BUF_2 4
     call add_buf
 +   call mul_buf_2
     ld MUL_NIBBLE
     _andi #$1
     jz +
-    ld MUL_BUF_1
-    st SUB_BUF_2
-    ld MUL_BUF_1+1
-    st SUB_BUF_2+1
-    ld MUL_BUF_1+2
-    st SUB_BUF_2+2
-    ld MUL_BUF_1+3
-    st SUB_BUF_2+3
+    cpbuf MUL_BUF_1 SUB_BUF_2 4
     call add_buf
 +   ret
 
 mul_buf_2:
     ; SUB_BUF_2 = SUB_BUF_1
     ; SUB_BUF_1 = SUB_BUF_1 + SUB_BUF_2
-    ld SUB_BUF_1
-    st SUB_BUF_2
-    ld SUB_BUF_1+1
-    st SUB_BUF_2+1
-    ld SUB_BUF_1+2
-    st SUB_BUF_2+2
-    ld SUB_BUF_1+3
-    st SUB_BUF_2+3
+    cpbuf SUB_BUF_1 SUB_BUF_2 4
     call add_buf
     addi #0
     ret

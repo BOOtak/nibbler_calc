@@ -334,6 +334,42 @@ def process_asm(text_lines):
             asm_lines.remove(asm_lines[writebuf_index])
             asm_lines[writebuf_index:writebuf_index] = writebuf_insert
             update_line_nums(asm_lines)
+
+    # handle cpbuf
+    cpbuf_found = True
+    while cpbuf_found:
+        cpbuf_found = False
+        cpbuf_index = 0
+        cpbuf_insert = []
+        for i, line in enumerate(asm_lines):
+            if line.is_instruction:
+                if line.opcode == "cpbuf":
+                    cpbuf_found = True
+                    cpbuf_index = i
+                    src, dst, size = line.params[0], line.params[1], line.params[2]
+
+                    src_offset, dst_offset = 0, 0
+                    if src.find("+") != -1:
+                        src_offset = int(src.split("+")[1])
+                        src = src.split("+")[0]
+
+                    if dst.find("+") != -1:
+                        dst_offset = int(dst.split("+")[1])
+                        dst = dst.split("+")[0]
+
+                    for i in range(int(size)):
+                        prefix = ""
+                        if i == 0:
+                            prefix = line.local_label
+
+                        cpbuf_insert.append(AsmLine("{0:4}ld {1}+{2}".format(prefix, src, src_offset + i), 0))
+                        cpbuf_insert.append(AsmLine("    st {0}+{1}".format(dst, dst_offset + i), 0))
+                    break
+        if cpbuf_found:
+            asm_lines.remove(asm_lines[cpbuf_index])
+            asm_lines[cpbuf_index:cpbuf_index] = cpbuf_insert
+            update_line_nums(asm_lines)
+
     return asm_lines
 
 def write_file(filename, asm_lines):
