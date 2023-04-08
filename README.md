@@ -24,7 +24,8 @@ nibbler-assembler -o calcu.bin calcu.asm
 
 Download (and optionally build) Nibbler Simulator from the [Nibbler file archive](https://www.bigmessowires.com/nibbler.zip) mentioned above
 
-![Simulator window](https://user-images.githubusercontent.com/2512758/230735691-392cdaeb-1845-48ca-8365-add314dbbbc8.png)
+![Simulator window](https://user-images.githubusercontent.com/2512758/230735895-63ddf64c-fb67-4403-9b86-165001e575dd.png)
+
 
 Open calcu.bin compiled at the previous step and press "Run"
 
