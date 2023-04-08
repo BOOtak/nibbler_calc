@@ -2,8 +2,6 @@
 
 ## Simple calculator for [Nibbler 4 Bit computer](https://www.bigmessowires.com/nibbler/)
 
-Part of a master's thesis in SUAI
-
 This program performs 3 basic arithmetic operations on 4-digit integer numbers
 
 Coded entirely in assembly with custom assembly preprocessor (for rudimentary `call`-like instructions, etc.)
